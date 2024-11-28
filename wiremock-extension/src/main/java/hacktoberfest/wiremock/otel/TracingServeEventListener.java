@@ -1,9 +1,5 @@
 package hacktoberfest.wiremock.otel;
 
-import static io.opentelemetry.sdk.trace.samplers.Sampler.alwaysOn;
-import static io.opentelemetry.sdk.trace.samplers.Sampler.parentBased;
-import static io.opentelemetry.semconv.resource.attributes.ResourceAttributes.SERVICE_NAME;
-
 import com.github.tomakehurst.wiremock.extension.Parameters;
 import com.github.tomakehurst.wiremock.extension.ServeEventListener;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
@@ -11,7 +7,12 @@ import com.github.tomakehurst.wiremock.stubbing.SubEvent;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
-import io.micrometer.tracing.otel.bridge.*;
+import io.micrometer.tracing.otel.bridge.OtelBaggageManager;
+import io.micrometer.tracing.otel.bridge.OtelCurrentTraceContext;
+import io.micrometer.tracing.otel.bridge.OtelPropagator;
+import io.micrometer.tracing.otel.bridge.OtelTracer;
+import io.micrometer.tracing.otel.bridge.Slf4JBaggageEventListener;
+import io.micrometer.tracing.otel.bridge.Slf4JEventListener;
 import io.micrometer.tracing.propagation.Propagator;
 import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator;
 import io.opentelemetry.api.common.Attributes;
@@ -23,8 +24,14 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
+
+import static io.opentelemetry.sdk.trace.samplers.Sampler.alwaysOn;
+import static io.opentelemetry.sdk.trace.samplers.Sampler.parentBased;
+import static io.opentelemetry.semconv.resource.attributes.ResourceAttributes.SERVICE_NAME;
 
 public class TracingServeEventListener implements ServeEventListener {
     private static final String SUB_EVENT_NAME = "tracing-event";
@@ -32,7 +39,12 @@ public class TracingServeEventListener implements ServeEventListener {
     private final Propagator propagator;
 
     public TracingServeEventListener() {
-        final var spanExporter = OtlpHttpSpanExporter.builder().build();
+        String url = Optional.ofNullable(System.getenv("TRACES_URL"))
+                .orElse("http://localhost:4318/v1/traces");
+        System.out.println("TracingServeEventListener - TRACES_URL: " + url);
+        final var spanExporter = OtlpHttpSpanExporter.builder()
+                .setEndpoint(url)
+                .build();
         final var sdkTracerProvider = SdkTracerProvider.builder()
                 .setResource(Resource.create(Attributes.of(SERVICE_NAME, "wiremock-otel")))
                 .setSampler(parentBased(alwaysOn()))
@@ -69,6 +81,7 @@ public class TracingServeEventListener implements ServeEventListener {
         final var extractedSpan = propagator
                 .extract(serveEvent.getRequest(), LoggedRequest::getHeader)
                 .kind(Span.Kind.SERVER)
+                .name(serveEvent.getRequest().getMethod() + " " + serveEvent.getRequest().getUrl())
                 .remoteIpAndPort(
                         serveEvent.getRequest().getClientIp(),
                         serveEvent.getRequest().getPort())
@@ -88,6 +101,11 @@ public class TracingServeEventListener implements ServeEventListener {
                     final var scope = (Tracer.SpanInScope) data.get("scope");
                     scope.close();
                     final var span = (Span) data.get("span");
+                    span.tag("Status", serveEvent.getResponse().getStatus());
+                    if (serveEvent.getRequest().getHeader("TRACE_ON") != null ) {
+                        span.tag("requestBody", serveEvent.getRequest().getBodyAsString());
+                        span.tag("responseBody", serveEvent.getResponse().getBodyAsString());
+                    }
                     span.end();
                 });
     }

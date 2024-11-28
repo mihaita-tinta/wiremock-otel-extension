@@ -12,3 +12,10 @@ please contact us on the [community Slack](https://slack.wiremock.org/).
 
 - [GitHub Repository](https://github.com/wiremock/wiremock-otel-extension)
 - [GitHub Issue for discussion](https://github.com/wiremock/wiremock/issues/2416)
+
+Command to generate the fat jar:
+```shell
+gradle shadowJar
+```
+The `wiremock-extension-all.jar` can be imported in the Wiremock instance
+and both metrics and tracing extension are activated

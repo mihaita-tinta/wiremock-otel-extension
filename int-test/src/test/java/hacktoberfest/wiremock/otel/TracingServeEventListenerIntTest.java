@@ -1,5 +1,11 @@
 package hacktoberfest.wiremock.otel;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static io.opentelemetry.sdk.trace.samplers.Sampler.alwaysOn;
+import static io.opentelemetry.sdk.trace.samplers.Sampler.parentBased;
+import static io.opentelemetry.semconv.resource.attributes.ResourceAttributes.SERVICE_NAME;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import io.micrometer.tracing.Span;
@@ -16,21 +22,14 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
-
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
-import static io.opentelemetry.sdk.trace.samplers.Sampler.alwaysOn;
-import static io.opentelemetry.sdk.trace.samplers.Sampler.parentBased;
-import static io.opentelemetry.semconv.resource.attributes.ResourceAttributes.SERVICE_NAME;
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 @WireMockTest
 public class TracingServeEventListenerIntTest {
@@ -72,7 +71,9 @@ public class TracingServeEventListenerIntTest {
 
     @Test
     public void iCanTraceAWiremockRequest(final WireMockRuntimeInfo runtimeInfo) throws Exception {
-        stubFor(get(urlPathEqualTo("/")).withName("root_200").willReturn(aResponse().withStatus(200)));
+        stubFor(get(urlPathEqualTo("/"))
+                .withName("root_200")
+                .willReturn(aResponse().withStatus(200)));
 
         final Span span = tracer.nextSpan().name("iCanTraceAWiremockRequest");
         final var request =
@@ -80,6 +81,7 @@ public class TracingServeEventListenerIntTest {
         propagator.inject(span.context(), request, HttpRequest.Builder::header);
         final var send = httpClient.send(request.build(), HttpResponse.BodyHandlers.discarding());
         assertThat(send.statusCode()).isEqualTo(200);
+        span.tag("response.status", send.statusCode());
         span.end();
 
         final var allServeEvents = getAllServeEvents();

@@ -14,7 +14,7 @@ allprojects {
 
     java {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(17)
+            languageVersion = JavaLanguageVersion.of(11)
         }
     }
 
@@ -52,7 +52,6 @@ allprojects {
 
         testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     }
-
     spotless {
         java {
             palantirJavaFormat()
